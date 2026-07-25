@@ -13,9 +13,20 @@ The proxy handles Databricks wire compatibility; the Spark extension handles
 distributed result generation. Both are required. Large result bytes travel
 directly from S3 to the JDBC client and do not pass through the proxy.
 
-```text
-SQL:     Databricks JDBC -> KloudFetch proxy -> Spark Thrift Server
-Results: Spark executors -> S3-compatible storage -> Databricks JDBC
+```mermaid
+sequenceDiagram
+    participant JDBC as Databricks JDBC
+    participant Proxy as KloudFetch proxy
+    participant Spark as Spark Thrift Server
+    participant S3 as S3-compatible storage
+
+    JDBC->>Proxy: Execute SQL
+    Proxy->>Spark: Forward tagged SQL
+    Spark->>S3: Executors write Arrow files
+    Spark-->>Proxy: Query complete
+    Proxy-->>JDBC: Return presigned URLs
+    JDBC->>S3: Request result files
+    S3-->>JDBC: Download Arrow directly
 ```
 
 The extension is loaded with Spark's `spark.sql.extensions` configuration, so
