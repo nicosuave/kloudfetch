@@ -1,15 +1,29 @@
 # KloudFetch
 
-KloudFetch adds Databricks Cloud Fetch-compatible result delivery to an
-unmodified Apache Spark Thrift Server. Spark executors write bounded Arrow IPC
-streams to S3-compatible storage, while a small Thrift HTTP proxy presents
-those objects as `TSparkArrowResultLink` values to an unmodified Databricks
-JDBC client.
+KloudFetch has **two required components**:
 
-KloudFetch is loaded through Spark's `spark.sql.extensions` configuration. It
-injects one Catalyst resolution rule and one physical-planning strategy for
-queries tagged by the proxy, so it runs against an unmodified Spark
-distribution.
+1. **A JDBC/Thrift proxy.** The Databricks JDBC driver connects to this proxy,
+   not directly to Spark. The proxy forwards SQL to Spark and returns
+   Databricks-compatible `TSparkArrowResultLink` responses.
+2. **A Spark extension.** This JAR runs inside Spark. For queries tagged by the
+   proxy, Spark executors serialize result partitions as Arrow and upload them
+   directly to S3-compatible storage.
+
+The proxy handles Databricks wire compatibility; the Spark extension handles
+distributed result generation. Both are required. Large result bytes travel
+directly from S3 to the JDBC client and do not pass through the proxy.
+
+```text
+Databricks JDBC -> KloudFetch proxy -> Spark Thrift Server
+       |                                      |
+       +--------- downloads Arrow <--------- S3
+                                               ^
+                                               |
+                                      Spark executors
+```
+
+The extension is loaded with Spark's `spark.sql.extensions` configuration, so
+KloudFetch does not require a custom Spark distribution.
 
 ## Development stack
 
