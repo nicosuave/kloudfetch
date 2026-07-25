@@ -55,6 +55,36 @@ binary data, nulls, empty results, and schema isolation on every Spark version.
 Databricks JDBC 2.x is the separate legacy Simba driver and is not supported by
 this OSS-driver compatibility matrix.
 
+## Production status
+
+**Status: beta / production candidate. KloudFetch is not yet presented as a
+production-ready service.**
+
+What has been demonstrated:
+
+- 48 end-to-end Spark/JDBC compatibility combinations in GitHub Actions
+- a verified 10 GiB result through the unmodified Databricks JDBC driver, with
+  multipart Arrow uploads and result bytes bypassing the proxy
+- bounded concurrency, cancellation, proxy restart, executor loss, task retry,
+  partial-upload recovery, expired-URL, and cleanup tests
+- object-store-backed operation state that supports multiple proxy replicas
+
+Before a production deployment, the operator should still:
+
+- run a sustained soak test against the actual S3-compatible provider, Spark
+  cluster, network, and consumer workload
+- deploy TLS, production authentication, secret management, least-privilege
+  object-store credentials, and the required KMS or encryption policy
+- add deployment-specific metrics, traces, alerts, dashboards, SLOs, capacity
+  limits, and backpressure
+- validate rolling upgrades, rollback, disaster recovery, lifecycle rules, and
+  cleanup under the chosen orchestrator
+- complete the organization's security and operational review
+
+The included Compose stack is a reproducible compatibility, performance, and
+failure test environment. It deliberately uses test credentials and plaintext
+local transport; it is not a hardened production deployment.
+
 ## Development stack
 
 The included stack runs Spark 4.1.2 against RustFS:
@@ -206,13 +236,3 @@ The same environment was also exercised through the unmodified Databricks JDBC
 
 The automated Python suite includes a proxy-state recreation test to verify
 that operation cursors and cleanup deadlines survive process replacement.
-
-## Production status
-
-The plugin architecture, Databricks wire compatibility, shared state, cleanup,
-retry behavior, and bounded failure/load tests are implemented. Before calling
-a deployment production-ready, validate its actual S3 provider, credentials and
-network topology; add service-specific metrics and alerts; define storage
-lifecycle and key-management policy; and run the JDBC/type matrix against the
-exact client versions used by consumers. The Compose environment is a
-reproducible compatibility and load test, not a security-hardened deployment.
