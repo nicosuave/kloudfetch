@@ -14,10 +14,8 @@ distributed result generation. Both are required. Large result bytes travel
 directly from S3 to the JDBC client and do not pass through the proxy.
 
 ```text
-Databricks JDBC -> KloudFetch proxy -> Spark Thrift Server
-       ^                              |
-       | downloads Arrow              v
-S3-compatible storage <------- Spark executors
+SQL:     Databricks JDBC -> KloudFetch proxy -> Spark Thrift Server
+Results: Spark executors -> S3-compatible storage -> Databricks JDBC
 ```
 
 The extension is loaded with Spark's `spark.sql.extensions` configuration, so
