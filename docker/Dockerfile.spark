@@ -1,0 +1,39 @@
+FROM maven:3.9.11-eclipse-temurin-17 AS extension-build
+WORKDIR /build
+COPY spark-extension/pom.xml ./pom.xml
+COPY spark-extension/src ./src
+RUN mvn -q -DskipTests package
+
+FROM eclipse-temurin:17-jre
+
+ARG SPARK_VERSION=4.1.2
+ARG HADOOP_AWS_VERSION=3.4.1
+ARG AWS_SDK_VERSION=2.29.26
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends bash curl procps tini \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl --fail --location --retry 5 \
+      "https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop3.tgz" \
+      --output /tmp/spark.tgz \
+    && test "$(sha512sum /tmp/spark.tgz | cut -d' ' -f1)" = \
+      "$(curl --fail --location --retry 5 \
+        "https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop3.tgz.sha512" \
+        | awk '{print $1}')" \
+    && tar -xzf /tmp/spark.tgz -C /opt \
+    && ln -s "/opt/spark-${SPARK_VERSION}-bin-hadoop3" /opt/spark \
+    && rm /tmp/spark.tgz
+
+COPY --from=extension-build \
+  /build/target/kloudfetch-spark-0.1.0.jar \
+  /opt/spark/jars/kloudfetch-spark.jar
+COPY docker/start-spark.sh /usr/local/bin/start-spark
+
+ENV SPARK_HOME=/opt/spark
+ENV PATH=/opt/spark/bin:/opt/spark/sbin:$PATH
+ENV HADOOP_AWS_VERSION=${HADOOP_AWS_VERSION}
+ENV AWS_SDK_VERSION=${AWS_SDK_VERSION}
+
+EXPOSE 10001 4040
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/start-spark"]

@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - name: Python tests
+        run: |
+          uv sync --extra test
+          uv run pytest -q
+      - name: Python lint
+        run: uvx ruff check .
+      - name: Compose validation
+        run: docker compose config --quiet
+      - name: Build Spark extension
+        run: mvn -q -f spark-extension/pom.xml -DskipTests package
+      - name: Compile JDBC harnesses
+        run: mvn -q -f integration/jdbc/pom.xml compile

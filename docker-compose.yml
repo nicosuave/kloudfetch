@@ -1,0 +1,302 @@
+services:
+  rustfs:
+    image: rustfs/rustfs@sha256:84ce557a0245a06a9aae5516f55ee0f007fca78d41df356f419306fdc0cb168c
+    command: /data
+    environment:
+      RUSTFS_ACCESS_KEY: kloudfetch
+      RUSTFS_SECRET_KEY: kloudfetch-secret
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_CONSOLE_ENABLE: "true"
+      # Development-only 32-byte key: "0123456789abcdef" repeated twice.
+      RUSTFS_SSE_S3_MASTER_KEY: "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - "${KLOUDFETCH_RUSTFS_DATA_DIR:-rustfs-data}:/data"
+
+  rustfs-init:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.proxy
+    entrypoint: ["kloudfetch-init"]
+    environment: &s3-environment
+      AWS_ACCESS_KEY_ID: kloudfetch
+      AWS_SECRET_ACCESS_KEY: kloudfetch-secret
+      AWS_REGION: us-east-1
+      KLOUDFETCH_S3_ENDPOINT_URL: http://rustfs:9000
+      KLOUDFETCH_S3_BUCKET: kloudfetch
+      KLOUDFETCH_S3_PREFIX: results
+      KLOUDFETCH_LIFECYCLE_DAYS: "1"
+    depends_on:
+      - rustfs
+    restart: "no"
+
+  spark:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.spark
+    environment:
+      <<: *s3-environment
+      KLOUDFETCH_MIN_ESTIMATED_BYTES: "0"
+      KLOUDFETCH_MAX_RECORDS_PER_BATCH: "250000"
+      KLOUDFETCH_MAX_ESTIMATED_BATCH_BYTES: "67108864"
+      KLOUDFETCH_ARROW_COMPRESSION: "none"
+      KLOUDFETCH_MULTIPART_SIZE: "16777216"
+      KLOUDFETCH_MULTIPART_THRESHOLD: "16777216"
+      KLOUDFETCH_SSE_ALGORITHM: "AES256"
+      KLOUDFETCH_TASK_MAX_FAILURES: "4"
+      KLOUDFETCH_SPECULATION: "${KLOUDFETCH_SPECULATION:-true}"
+      JAVA_TOOL_OPTIONS: "-XX:+PerfDisableSharedMem"
+      KLOUDFETCH_TEST_FAIL_FIRST_ATTEMPT_PARTITION: "${KLOUDFETCH_TEST_FAIL_FIRST_ATTEMPT_PARTITION:--1}"
+      KLOUDFETCH_TEST_SLOW_FIRST_ATTEMPT_PARTITION: "${KLOUDFETCH_TEST_SLOW_FIRST_ATTEMPT_PARTITION:--1}"
+      KLOUDFETCH_TEST_SLOW_FIRST_ATTEMPT_MILLIS: "${KLOUDFETCH_TEST_SLOW_FIRST_ATTEMPT_MILLIS:-0}"
+      KLOUDFETCH_TEST_FAIL_DURING_UPLOAD_PARTITION: "${KLOUDFETCH_TEST_FAIL_DURING_UPLOAD_PARTITION:--1}"
+      SPARK_SQL_SHUFFLE_PARTITIONS: "4"
+    depends_on:
+      rustfs-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/10001"]
+      interval: 5s
+      timeout: 2s
+      retries: 60
+      start_period: 10s
+    ports:
+      - "10001:10001"
+    volumes:
+      - "${KLOUDFETCH_SPARK_METASTORE_DIR:-/tmp/kloudfetch-spark-metastore}:/tmp/kloudfetch-metastore"
+
+  spark-master:
+    profiles: ["cluster"]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.spark
+    entrypoint:
+      - /usr/bin/tini
+      - --
+      - /opt/spark/bin/spark-class
+      - org.apache.spark.deploy.master.Master
+      - --host
+      - spark-master
+      - --port
+      - "7077"
+      - --webui-port
+      - "8080"
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:+PerfDisableSharedMem"
+
+  spark-worker-1:
+    profiles: ["cluster"]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.spark
+    entrypoint:
+      - /usr/bin/tini
+      - --
+      - /opt/spark/bin/spark-class
+      - org.apache.spark.deploy.worker.Worker
+      - spark://spark-master:7077
+      - --cores
+      - "4"
+      - --memory
+      - 3g
+      - --webui-port
+      - "8081"
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:+PerfDisableSharedMem"
+    volumes:
+      - "${KLOUDFETCH_SPARK_WORKER_1_DIR:-/tmp/kloudfetch-spark-worker-1}:/opt/spark/work"
+    depends_on:
+      - spark-master
+
+  spark-worker-2:
+    profiles: ["cluster"]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.spark
+    entrypoint:
+      - /usr/bin/tini
+      - --
+      - /opt/spark/bin/spark-class
+      - org.apache.spark.deploy.worker.Worker
+      - spark://spark-master:7077
+      - --cores
+      - "4"
+      - --memory
+      - 3g
+      - --webui-port
+      - "8081"
+    environment:
+      JAVA_TOOL_OPTIONS: "-XX:+PerfDisableSharedMem"
+    volumes:
+      - "${KLOUDFETCH_SPARK_WORKER_2_DIR:-/tmp/kloudfetch-spark-worker-2}:/opt/spark/work"
+    depends_on:
+      - spark-master
+
+  spark-cluster:
+    profiles: ["cluster"]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.spark
+    environment:
+      <<: *s3-environment
+      SPARK_MASTER: spark://spark-master:7077
+      SPARK_DRIVER_HOST: spark-cluster
+      SPARK_EXECUTOR_CORES: "2"
+      SPARK_EXECUTOR_MEMORY: 2g
+      KLOUDFETCH_MIN_ESTIMATED_BYTES: "0"
+      KLOUDFETCH_MAX_RECORDS_PER_BATCH: "250000"
+      KLOUDFETCH_MAX_ESTIMATED_BATCH_BYTES: "67108864"
+      KLOUDFETCH_ARROW_COMPRESSION: "none"
+      KLOUDFETCH_MULTIPART_SIZE: "16777216"
+      KLOUDFETCH_MULTIPART_THRESHOLD: "16777216"
+      KLOUDFETCH_SSE_ALGORITHM: "AES256"
+      KLOUDFETCH_TASK_MAX_FAILURES: "4"
+      KLOUDFETCH_SPECULATION: "${KLOUDFETCH_SPECULATION:-true}"
+      JAVA_TOOL_OPTIONS: "-XX:+PerfDisableSharedMem"
+      KLOUDFETCH_TEST_FAIL_FIRST_ATTEMPT_PARTITION: "${KLOUDFETCH_TEST_FAIL_FIRST_ATTEMPT_PARTITION:--1}"
+      KLOUDFETCH_TEST_SLOW_FIRST_ATTEMPT_PARTITION: "${KLOUDFETCH_TEST_SLOW_FIRST_ATTEMPT_PARTITION:--1}"
+      KLOUDFETCH_TEST_SLOW_FIRST_ATTEMPT_MILLIS: "${KLOUDFETCH_TEST_SLOW_FIRST_ATTEMPT_MILLIS:-0}"
+      KLOUDFETCH_TEST_FAIL_DURING_UPLOAD_PARTITION: "${KLOUDFETCH_TEST_FAIL_DURING_UPLOAD_PARTITION:--1}"
+      SPARK_SQL_SHUFFLE_PARTITIONS: "8"
+    depends_on:
+      rustfs-init:
+        condition: service_completed_successfully
+      spark-worker-1:
+        condition: service_started
+      spark-worker-2:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/10001"]
+      interval: 5s
+      timeout: 2s
+      retries: 60
+      start_period: 10s
+    volumes:
+      - "${KLOUDFETCH_SPARK_CLUSTER_METASTORE_DIR:-/tmp/kloudfetch-spark-cluster-metastore}:/tmp/kloudfetch-metastore"
+
+  proxy:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.proxy
+    environment:
+      <<: *s3-environment
+      KLOUDFETCH_S3_PUBLIC_ENDPOINT_URL: http://host.docker.internal:9000
+      KLOUDFETCH_UPSTREAM_HOST: "${KLOUDFETCH_UPSTREAM_HOST:-spark}"
+      KLOUDFETCH_UPSTREAM_PORT: "10001"
+      KLOUDFETCH_LISTEN_PORT: "10000"
+      KLOUDFETCH_PASSWORD: test-token
+      KLOUDFETCH_URL_TTL_SECONDS: "900"
+      KLOUDFETCH_CLEANUP_DELAY_SECONDS: "${KLOUDFETCH_CLEANUP_DELAY_SECONDS:-900}"
+      KLOUDFETCH_CLEANUP_INTERVAL_SECONDS: "${KLOUDFETCH_CLEANUP_INTERVAL_SECONDS:-60}"
+      KLOUDFETCH_OPERATION_MAX_AGE_SECONDS: "${KLOUDFETCH_OPERATION_MAX_AGE_SECONDS:-86400}"
+      KLOUDFETCH_STATE_PREFIX: kloudfetch-state
+      KLOUDFETCH_MANIFEST_WORKERS: "16"
+      KLOUDFETCH_MAX_LINKS_PER_FETCH: "16"
+    depends_on:
+      spark:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:10000/health')"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    ports:
+      - "10000:10000"
+
+  jdbc-test:
+    profiles: ["test"]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.jdbc-test
+    environment:
+      KLOUDFETCH_JDBC_URL: "jdbc:databricks://proxy:10000/default;transportMode=http;ssl=0;AuthMech=3;httpPath=/cliservice;UID=token;PWD=test-token;EnableTelemetry=0"
+    depends_on:
+      proxy:
+        condition: service_healthy
+
+  jdbc-benchmark:
+    profiles: ["benchmark"]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.jdbc-test
+    entrypoint:
+      - mvn
+      - -q
+      - compile
+      - exec:java
+      - -Dexec.mainClass=io.kloudfetch.JdbcBenchmark
+    environment:
+      KLOUDFETCH_JDBC_URL: "jdbc:databricks://proxy:10000/default;transportMode=http;ssl=0;AuthMech=3;httpPath=/cliservice;UID=token;PWD=test-token;EnableTelemetry=0"
+      KLOUDFETCH_BENCHMARK_BYTES: "${KLOUDFETCH_BENCHMARK_BYTES:-104857600}"
+      KLOUDFETCH_BENCHMARK_PARTITIONS: "${KLOUDFETCH_BENCHMARK_PARTITIONS:-4}"
+      MAVEN_OPTS: "-XX:+PerfDisableSharedMem -Xmx4g"
+      JAVA_TOOL_OPTIONS: "-XX:+PerfDisableSharedMem"
+    depends_on:
+      proxy:
+        condition: service_healthy
+
+  jdbc-types:
+    profiles: ["test"]
+    extends: jdbc-test
+    entrypoint:
+      - mvn
+      - -q
+      - compile
+      - exec:java
+      - -Dexec.mainClass=io.kloudfetch.JdbcTypeCoverage
+    environment:
+      KLOUDFETCH_JDBC_URL: "jdbc:databricks://proxy:10000/default;transportMode=http;ssl=0;AuthMech=3;httpPath=/cliservice;UID=token;PWD=test-token;EnableTelemetry=0;EnableComplexDatatypeSupport=1"
+
+  jdbc-concurrency:
+    profiles: ["test"]
+    extends: jdbc-test
+    entrypoint:
+      - mvn
+      - -q
+      - compile
+      - exec:java
+      - -Dexec.mainClass=io.kloudfetch.JdbcConcurrency
+    environment:
+      KLOUDFETCH_CONCURRENCY: "${KLOUDFETCH_CONCURRENCY:-8}"
+      KLOUDFETCH_ITERATIONS: "${KLOUDFETCH_ITERATIONS:-10}"
+      KLOUDFETCH_ROWS_PER_QUERY: "${KLOUDFETCH_ROWS_PER_QUERY:-4096}"
+      KLOUDFETCH_JDBC_URL_2: "${KLOUDFETCH_JDBC_URL_2:-jdbc:databricks://proxy:10000/default;transportMode=http;ssl=0;AuthMech=3;httpPath=/cliservice;UID=token;PWD=test-token;EnableTelemetry=0}"
+
+  jdbc-cancel:
+    profiles: ["test"]
+    extends: jdbc-test
+    entrypoint:
+      - mvn
+      - -q
+      - compile
+      - exec:java
+      - -Dexec.mainClass=io.kloudfetch.JdbcCancellation
+
+  jdbc-restart:
+    profiles: ["test"]
+    extends: jdbc-test
+    entrypoint:
+      - mvn
+      - -q
+      - compile
+      - exec:java
+      - -Dexec.mainClass=io.kloudfetch.JdbcRestart
+    environment:
+      KLOUDFETCH_RESTART_PAUSE_MILLIS: "${KLOUDFETCH_RESTART_PAUSE_MILLIS:-15000}"
+
+  expiry-test:
+    profiles: ["test"]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.proxy
+    entrypoint: ["kloudfetch-expiry-test"]
+    environment:
+      <<: *s3-environment
+    depends_on:
+      rustfs-init:
+        condition: service_completed_successfully
+
+volumes:
+  rustfs-data:

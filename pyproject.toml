@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "kloudfetch"
+version = "0.1.0"
+description = "Databricks Cloud Fetch-compatible result spooling for Apache Spark"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "Apache-2.0"}
+dependencies = [
+  "boto3>=1.35,<2",
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest>=8,<9",
+]
+
+[project.scripts]
+kloudfetch-proxy = "kloudfetch.proxy:main"
+kloudfetch-init = "kloudfetch.init_bucket:main"
+kloudfetch-expiry-test = "kloudfetch.expiry_test:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/kloudfetch"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

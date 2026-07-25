@@ -1,0 +1,6 @@
+FROM maven:3.9.11-eclipse-temurin-17
+WORKDIR /test
+COPY integration/jdbc/pom.xml ./pom.xml
+RUN mvn -q dependency:go-offline
+COPY integration/jdbc/src ./src
+ENTRYPOINT ["mvn", "-q", "compile", "exec:java"]
