@@ -224,6 +224,7 @@ services:
     environment:
       DATABRICKS_JDBC_VERSION: "${DATABRICKS_JDBC_VERSION:-3.4.2}"
       KLOUDFETCH_JDBC_URL: "jdbc:databricks://proxy:10000/default;transportMode=http;ssl=0;AuthMech=3;httpPath=/cliservice;UID=token;PWD=test-token;EnableTelemetry=0"
+      MAVEN_OPTS: "--add-opens=java.base/java.nio=ALL-UNNAMED"
     depends_on:
       proxy:
         condition: service_healthy
@@ -241,7 +242,7 @@ services:
       KLOUDFETCH_JDBC_URL: "jdbc:databricks://proxy:10000/default;transportMode=http;ssl=0;AuthMech=3;httpPath=/cliservice;UID=token;PWD=test-token;EnableTelemetry=0"
       KLOUDFETCH_BENCHMARK_BYTES: "${KLOUDFETCH_BENCHMARK_BYTES:-104857600}"
       KLOUDFETCH_BENCHMARK_PARTITIONS: "${KLOUDFETCH_BENCHMARK_PARTITIONS:-4}"
-      MAVEN_OPTS: "-XX:+PerfDisableSharedMem -Xmx4g"
+      MAVEN_OPTS: "--add-opens=java.base/java.nio=ALL-UNNAMED -XX:+PerfDisableSharedMem -Xmx4g"
       JAVA_TOOL_OPTIONS: "-XX:+PerfDisableSharedMem"
     depends_on:
       proxy:

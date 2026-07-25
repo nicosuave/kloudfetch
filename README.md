@@ -72,17 +72,19 @@ docker compose --profile test run --rm jdbc-restart
 docker compose --profile test run --rm expiry-test
 ```
 
-CI runs the real Docker stack—not mocks—across 56 version combinations:
+CI runs the real Docker stack—not mocks—across 52 version combinations:
 
 - Spark `3.5.9`, `4.0.4`, `4.1.3`, and `4.2.0`
-- Databricks JDBC `2.6.25`, `2.6.40-patch-1`, `2.7.1`, `2.7.6`, `2.8.0`,
-  `2.8.3`, `3.0.1`, `3.0.7`, `3.1.1`, `3.2.1`, `3.3.1`, `3.3.3`, `3.4.1`,
-  and `3.4.2`
+- every released modern Databricks JDBC 3.x driver: `3.0.1`, `3.0.3`,
+  `3.0.4`, `3.0.5`, `3.0.6`, `3.0.7`, `3.1.1`, `3.2.1`, `3.3.1`, `3.3.2`,
+  `3.3.3`, `3.4.1`, and `3.4.2`
 
 Each Spark job starts Spark Thrift Server, the KloudFetch proxy, and RustFS,
 then verifies ordered Cloud Fetch results with every driver. The newest driver
 also runs the nested, temporal, decimal, binary, empty-result, null, and schema
 isolation suite. Matrix failures include the complete service logs.
+Databricks JDBC 2.x is the separate legacy Simba driver and is not included in
+this OSS-driver matrix.
 
 An optional `cluster` Compose profile starts a Spark standalone master and two
 workers. It exists for executor retry/speculation testing; the ordinary local
