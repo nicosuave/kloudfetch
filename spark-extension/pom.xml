@@ -9,7 +9,7 @@
   <version>0.1.0</version>
   <name>KloudFetch Spark extension</name>
   <description>Distributed Arrow result spooling for Apache Spark</description>
-  <url>https://github.com/sidequery/kloudfetch</url>
+  <url>https://github.com/nicosuave/kloudfetch</url>
 
   <licenses>
     <license>

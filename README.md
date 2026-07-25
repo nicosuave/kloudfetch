@@ -15,11 +15,9 @@ directly from S3 to the JDBC client and do not pass through the proxy.
 
 ```text
 Databricks JDBC -> KloudFetch proxy -> Spark Thrift Server
-       |                                      |
-       +--------- downloads Arrow <--------- S3
-                                               ^
-                                               |
-                                      Spark executors
+       ^                              |
+       | downloads Arrow              v
+S3-compatible storage <------- Spark executors
 ```
 
 The extension is loaded with Spark's `spark.sql.extensions` configuration, so
