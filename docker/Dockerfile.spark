@@ -1,14 +1,25 @@
+ARG SPARK_VERSION=4.1.2
+ARG SCALA_VERSION=2.13.16
+ARG SCALA_BINARY_VERSION=2.13
+ARG HADOOP_AWS_VERSION=3.4.1
+
 FROM maven:3.9.11-eclipse-temurin-17 AS extension-build
+ARG SPARK_VERSION
+ARG SCALA_VERSION
+ARG SCALA_BINARY_VERSION
 WORKDIR /build
 COPY spark-extension/pom.xml ./pom.xml
 COPY spark-extension/src ./src
-RUN mvn -q -DskipTests package
+RUN mvn -q -DskipTests \
+      -Dspark.version="${SPARK_VERSION}" \
+      -Dscala.version="${SCALA_VERSION}" \
+      -Dscala.binary.version="${SCALA_BINARY_VERSION}" \
+      package
 
 FROM eclipse-temurin:17-jre
 
-ARG SPARK_VERSION=4.1.2
-ARG HADOOP_AWS_VERSION=3.4.1
-ARG AWS_SDK_VERSION=2.29.26
+ARG SPARK_VERSION
+ARG HADOOP_AWS_VERSION
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends bash curl procps tini \
@@ -33,7 +44,6 @@ COPY docker/start-spark.sh /usr/local/bin/start-spark
 ENV SPARK_HOME=/opt/spark
 ENV PATH=/opt/spark/bin:/opt/spark/sbin:$PATH
 ENV HADOOP_AWS_VERSION=${HADOOP_AWS_VERSION}
-ENV AWS_SDK_VERSION=${AWS_SDK_VERSION}
 
 EXPOSE 10001 4040
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/start-spark"]

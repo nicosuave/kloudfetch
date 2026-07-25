@@ -36,6 +36,11 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.spark
+      args: &spark-build-args
+        SPARK_VERSION: "${SPARK_VERSION:-4.1.2}"
+        SCALA_VERSION: "${SCALA_VERSION:-2.13.16}"
+        SCALA_BINARY_VERSION: "${SCALA_BINARY_VERSION:-2.13}"
+        HADOOP_AWS_VERSION: "${HADOOP_AWS_VERSION:-3.4.1}"
     environment:
       <<: *s3-environment
       KLOUDFETCH_MIN_ESTIMATED_BYTES: "0"
@@ -72,6 +77,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.spark
+      args: *spark-build-args
     entrypoint:
       - /usr/bin/tini
       - --
@@ -91,6 +97,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.spark
+      args: *spark-build-args
     entrypoint:
       - /usr/bin/tini
       - --
@@ -115,6 +122,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.spark
+      args: *spark-build-args
     entrypoint:
       - /usr/bin/tini
       - --
@@ -139,6 +147,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.spark
+      args: *spark-build-args
     environment:
       <<: *s3-environment
       SPARK_MASTER: spark://spark-master:7077
@@ -182,7 +191,7 @@ services:
       dockerfile: docker/Dockerfile.proxy
     environment:
       <<: *s3-environment
-      KLOUDFETCH_S3_PUBLIC_ENDPOINT_URL: http://host.docker.internal:9000
+      KLOUDFETCH_S3_PUBLIC_ENDPOINT_URL: "${KLOUDFETCH_S3_PUBLIC_ENDPOINT_URL:-http://host.docker.internal:9000}"
       KLOUDFETCH_UPSTREAM_HOST: "${KLOUDFETCH_UPSTREAM_HOST:-spark}"
       KLOUDFETCH_UPSTREAM_PORT: "10001"
       KLOUDFETCH_LISTEN_PORT: "10000"
@@ -210,7 +219,10 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.jdbc-test
+      args:
+        DATABRICKS_JDBC_VERSION: "${DATABRICKS_JDBC_VERSION:-3.4.2}"
     environment:
+      DATABRICKS_JDBC_VERSION: "${DATABRICKS_JDBC_VERSION:-3.4.2}"
       KLOUDFETCH_JDBC_URL: "jdbc:databricks://proxy:10000/default;transportMode=http;ssl=0;AuthMech=3;httpPath=/cliservice;UID=token;PWD=test-token;EnableTelemetry=0"
     depends_on:
       proxy:
@@ -221,13 +233,11 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.jdbc-test
-    entrypoint:
-      - mvn
-      - -q
-      - compile
-      - exec:java
-      - -Dexec.mainClass=io.kloudfetch.JdbcBenchmark
+      args:
+        DATABRICKS_JDBC_VERSION: "${DATABRICKS_JDBC_VERSION:-3.4.2}"
     environment:
+      DATABRICKS_JDBC_VERSION: "${DATABRICKS_JDBC_VERSION:-3.4.2}"
+      JDBC_TEST_MAIN_CLASS: io.kloudfetch.JdbcBenchmark
       KLOUDFETCH_JDBC_URL: "jdbc:databricks://proxy:10000/default;transportMode=http;ssl=0;AuthMech=3;httpPath=/cliservice;UID=token;PWD=test-token;EnableTelemetry=0"
       KLOUDFETCH_BENCHMARK_BYTES: "${KLOUDFETCH_BENCHMARK_BYTES:-104857600}"
       KLOUDFETCH_BENCHMARK_PARTITIONS: "${KLOUDFETCH_BENCHMARK_PARTITIONS:-4}"
@@ -240,25 +250,15 @@ services:
   jdbc-types:
     profiles: ["test"]
     extends: jdbc-test
-    entrypoint:
-      - mvn
-      - -q
-      - compile
-      - exec:java
-      - -Dexec.mainClass=io.kloudfetch.JdbcTypeCoverage
     environment:
+      JDBC_TEST_MAIN_CLASS: io.kloudfetch.JdbcTypeCoverage
       KLOUDFETCH_JDBC_URL: "jdbc:databricks://proxy:10000/default;transportMode=http;ssl=0;AuthMech=3;httpPath=/cliservice;UID=token;PWD=test-token;EnableTelemetry=0;EnableComplexDatatypeSupport=1"
 
   jdbc-concurrency:
     profiles: ["test"]
     extends: jdbc-test
-    entrypoint:
-      - mvn
-      - -q
-      - compile
-      - exec:java
-      - -Dexec.mainClass=io.kloudfetch.JdbcConcurrency
     environment:
+      JDBC_TEST_MAIN_CLASS: io.kloudfetch.JdbcConcurrency
       KLOUDFETCH_CONCURRENCY: "${KLOUDFETCH_CONCURRENCY:-8}"
       KLOUDFETCH_ITERATIONS: "${KLOUDFETCH_ITERATIONS:-10}"
       KLOUDFETCH_ROWS_PER_QUERY: "${KLOUDFETCH_ROWS_PER_QUERY:-4096}"
@@ -267,23 +267,14 @@ services:
   jdbc-cancel:
     profiles: ["test"]
     extends: jdbc-test
-    entrypoint:
-      - mvn
-      - -q
-      - compile
-      - exec:java
-      - -Dexec.mainClass=io.kloudfetch.JdbcCancellation
+    environment:
+      JDBC_TEST_MAIN_CLASS: io.kloudfetch.JdbcCancellation
 
   jdbc-restart:
     profiles: ["test"]
     extends: jdbc-test
-    entrypoint:
-      - mvn
-      - -q
-      - compile
-      - exec:java
-      - -Dexec.mainClass=io.kloudfetch.JdbcRestart
     environment:
+      JDBC_TEST_MAIN_CLASS: io.kloudfetch.JdbcRestart
       KLOUDFETCH_RESTART_PAUSE_MILLIS: "${KLOUDFETCH_RESTART_PAUSE_MILLIS:-15000}"
 
   expiry-test:

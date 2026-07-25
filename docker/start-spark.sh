@@ -13,7 +13,7 @@ exec /opt/spark/bin/spark-submit \
   --name "KloudFetch Spark Thrift Server" \
   --master "${SPARK_MASTER:-local[4,4]}" \
   --packages \
-    "org.apache.hadoop:hadoop-aws:${HADOOP_AWS_VERSION},software.amazon.awssdk:bundle:${AWS_SDK_VERSION}" \
+    "org.apache.hadoop:hadoop-aws:${HADOOP_AWS_VERSION}" \
   --conf spark.sql.extensions=org.apache.spark.sql.kloudfetch.KloudFetchSparkExtension \
   --conf spark.kloudfetch.bucket="${KLOUDFETCH_S3_BUCKET}" \
   --conf spark.kloudfetch.prefix="${KLOUDFETCH_S3_PREFIX}" \

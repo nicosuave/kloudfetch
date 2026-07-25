@@ -154,7 +154,7 @@ private final case class KloudFetchExec(
           attemptNumber == 0 && slowFirstAttemptMillis > 0) {
         Thread.sleep(slowFirstAttemptMillis)
       }
-      val iterator = ArrowConverters.toBatchWithSchemaIterator(
+      val iterator = CompatibleArrowConverters.toBatchWithSchemaIterator(
         rows,
         schema,
         maxRecordsPerBatch,
@@ -215,4 +215,55 @@ private final case class KloudFetchExec(
 
   override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
     copy(child = newChild)
+}
+
+/** Bridges the Spark 3.5 and Spark 4 ArrowConverters signatures.
+ *
+ * Spark 4 added the largeVarTypes argument to this internal API. Reflection is
+ * intentionally isolated here so the rest of the extension remains compiled
+ * and type-checked against each supported Spark release.
+ */
+private object CompatibleArrowConverters {
+  final class BatchIterator(private val delegate: AnyRef)
+      extends Iterator[Array[Byte]] {
+    private val rowCountMethod =
+      delegate.getClass.getMethod("rowCountInLastBatch")
+    private val underlying = delegate.asInstanceOf[Iterator[Array[Byte]]]
+
+    def rowCountInLastBatch: Long =
+      rowCountMethod.invoke(delegate).asInstanceOf[java.lang.Long].longValue()
+
+    override def hasNext: Boolean = underlying.hasNext
+    override def next(): Array[Byte] = underlying.next()
+  }
+
+  def toBatchWithSchemaIterator(
+      rows: Iterator[InternalRow],
+      schema: org.apache.spark.sql.types.StructType,
+      maxRecordsPerBatch: Long,
+      maxEstimatedBatchBytes: Long,
+      timeZoneId: String,
+      errorOnDuplicatedFieldNames: Boolean,
+      largeVarTypes: Boolean): BatchIterator = {
+    val methods = ArrowConverters.getClass.getMethods.filter(
+      _.getName == "toBatchWithSchemaIterator")
+    val method = methods.find(_.getParameterCount == 7)
+      .orElse(methods.find(_.getParameterCount == 6))
+      .getOrElse(throw new NoSuchMethodException(
+        "unsupported ArrowConverters.toBatchWithSchemaIterator signature"))
+    val common = Array[AnyRef](
+      rows,
+      schema,
+      java.lang.Long.valueOf(maxRecordsPerBatch),
+      java.lang.Long.valueOf(maxEstimatedBatchBytes),
+      timeZoneId,
+      java.lang.Boolean.valueOf(errorOnDuplicatedFieldNames))
+    val arguments =
+      if (method.getParameterCount == 7) {
+        common :+ java.lang.Boolean.valueOf(largeVarTypes)
+      } else {
+        common
+      }
+    new BatchIterator(method.invoke(ArrowConverters, arguments: _*))
+  }
 }

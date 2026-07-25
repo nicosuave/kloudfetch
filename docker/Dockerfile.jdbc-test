@@ -1,6 +1,9 @@
 FROM maven:3.9.11-eclipse-temurin-17
+ARG DATABRICKS_JDBC_VERSION=3.4.2
 WORKDIR /test
 COPY integration/jdbc/pom.xml ./pom.xml
-RUN mvn -q dependency:go-offline
+RUN mvn -q -Ddatabricks.jdbc.version="${DATABRICKS_JDBC_VERSION}" \
+      dependency:go-offline
 COPY integration/jdbc/src ./src
-ENTRYPOINT ["mvn", "-q", "compile", "exec:java"]
+COPY docker/run-jdbc-test.sh /usr/local/bin/run-jdbc-test
+ENTRYPOINT ["/usr/local/bin/run-jdbc-test"]
