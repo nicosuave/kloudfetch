@@ -1,5 +1,7 @@
 # KloudFetch
 
+[![CI](https://github.com/nicosuave/kloudfetch/actions/workflows/ci.yml/badge.svg)](https://github.com/nicosuave/kloudfetch/actions/workflows/ci.yml)
+
 KloudFetch has **two required components**:
 
 1. **A JDBC/Thrift proxy.** The Databricks JDBC driver connects to this proxy,
@@ -31,6 +33,27 @@ sequenceDiagram
 
 The extension is loaded with Spark's `spark.sql.extensions` configuration, so
 KloudFetch does not require a custom Spark distribution.
+
+## Compatibility
+
+The following matrix is tested end-to-end in GitHub Actions on every push and
+pull request:
+
+| Component | Tested versions |
+| --- | --- |
+| Apache Spark | `3.5.9`, `4.0.4`, `4.1.3`, `4.2.0` |
+| Databricks JDBC | `3.0.1`, `3.0.3`, `3.0.4`, `3.0.5`, `3.0.6`, `3.0.7`, `3.1.1`, `3.2.1`, `3.3.1`, `3.3.3`, `3.4.1`, `3.4.2` |
+| Object storage | Amazon S3 API; CI uses RustFS |
+
+All 48 Spark/JDBC combinations run against the real Docker stack: Spark Thrift
+Server, the KloudFetch proxy, RustFS, and the unmodified Databricks JDBC driver.
+The test executes SQL through JDBC, receives Cloud Fetch links, downloads the
+Arrow files from object storage, and validates row ordering and values.
+
+The newest JDBC driver additionally covers nested and temporal types, decimals,
+binary data, nulls, empty results, and schema isolation on every Spark version.
+Databricks JDBC 2.x is the separate legacy Simba driver and is not supported by
+this OSS-driver compatibility matrix.
 
 ## Development stack
 
@@ -71,20 +94,6 @@ docker compose --profile test run --rm jdbc-cancel
 docker compose --profile test run --rm jdbc-restart
 docker compose --profile test run --rm expiry-test
 ```
-
-CI runs the real Docker stack—not mocks—across 48 version combinations:
-
-- Spark `3.5.9`, `4.0.4`, `4.1.3`, and `4.2.0`
-- every released modern Databricks JDBC 3.x driver: `3.0.1`, `3.0.3`,
-  `3.0.4`, `3.0.5`, `3.0.6`, `3.0.7`, `3.1.1`, `3.2.1`, `3.3.1`, `3.3.3`,
-  `3.4.1`, and `3.4.2`
-
-Each Spark job starts Spark Thrift Server, the KloudFetch proxy, and RustFS,
-then verifies ordered Cloud Fetch results with every driver. The newest driver
-also runs the nested, temporal, decimal, binary, empty-result, null, and schema
-isolation suite. Matrix failures include the complete service logs.
-Databricks JDBC 2.x is the separate legacy Simba driver and is not included in
-this OSS-driver matrix.
 
 An optional `cluster` Compose profile starts a Spark standalone master and two
 workers. It exists for executor retry/speculation testing; the ordinary local
