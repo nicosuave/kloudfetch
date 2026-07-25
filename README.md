@@ -6,8 +6,10 @@ streams to S3-compatible storage, while a small Thrift HTTP proxy presents
 those objects as `TSparkArrowResultLink` values to an unmodified Databricks
 JDBC client.
 
-The Spark integration is a regular `spark.sql.extensions` JAR. It does not
-fork, patch, or replace Spark.
+KloudFetch is loaded through Spark's `spark.sql.extensions` configuration. It
+injects one Catalyst resolution rule and one physical-planning strategy for
+queries tagged by the proxy, so it runs against an unmodified Spark
+distribution.
 
 ## Development stack
 
